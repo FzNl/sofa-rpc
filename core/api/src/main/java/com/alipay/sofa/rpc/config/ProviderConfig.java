@@ -28,7 +28,6 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ThreadPoolExecutor;
 
@@ -541,5 +540,13 @@ public class ProviderConfig<T> extends AbstractInterfaceConfig<T, ProviderConfig
      */
     public ProviderBootstrap getProviderBootstrap() {
         return providerBootstrap;
+    }
+
+    /**
+     * set provider bootstrap
+     * @param providerBootstrap
+     */
+    public void setProviderBootstrap(ProviderBootstrap providerBootstrap) {
+        this.providerBootstrap = providerBootstrap;
     }
 }

@@ -42,7 +42,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -94,6 +99,11 @@ public class AllConnectConnectionHolder extends ConnectionHolder {
      * 失败待重试的客户端列表（连上后断开的）
      */
     protected ConcurrentMap<ProviderInfo, ClientTransport> retryConnections         = new ConcurrentHashMap<ProviderInfo, ClientTransport>();
+
+    /**
+     * last address for registry pushed
+     */
+    protected Set<ProviderInfo>                            lastAddresses            = new HashSet<ProviderInfo>();
 
     /**
      * 客户端变化provider的锁
@@ -386,6 +396,10 @@ public class AllConnectConnectionHolder extends ConnectionHolder {
     }
 
     protected void addNode(List<ProviderInfo> providerInfoList) {
+
+        //first update last all providers
+        lastAddresses.addAll(providerInfoList);
+
         final String interfaceId = consumerConfig.getInterfaceId();
         int providerSize = providerInfoList.size();
         String appName = consumerConfig.getAppName();
@@ -419,7 +433,6 @@ public class AllConnectConnectionHolder extends ConnectionHolder {
 
     /**
      * 线程池建立长连接
-     *
      */
     protected void initClientRunnable(ThreadPoolExecutor initPool, final CountDownLatch latch,
                                       final ProviderInfo providerInfo) {
@@ -462,6 +475,10 @@ public class AllConnectConnectionHolder extends ConnectionHolder {
     }
 
     public void removeNode(List<ProviderInfo> providerInfos) {
+
+        //first update last all providers
+        lastAddresses.removeAll(providerInfos);
+
         String interfaceId = consumerConfig.getInterfaceId();
         String appName = consumerConfig.getAppName();
         if (LOGGER.isInfoEnabled(appName)) {
@@ -561,9 +578,7 @@ public class AllConnectConnectionHolder extends ConnectionHolder {
         providerLock.lock();
         try {
             ConcurrentHashSet<ProviderInfo> providerInfos = new ConcurrentHashSet<ProviderInfo>();
-            providerInfos.addAll(aliveConnections.keySet());
-            providerInfos.addAll(subHealthConnections.keySet());
-            providerInfos.addAll(retryConnections.keySet());
+            providerInfos.addAll(lastAddresses);
             return providerInfos;
         } finally {
             providerLock.unlock();
@@ -616,6 +631,7 @@ public class AllConnectConnectionHolder extends ConnectionHolder {
             aliveConnections.clear();
             retryConnections.clear();
             uninitializedConnections.clear();
+            lastAddresses.clear();
             return all;
         } finally {
             providerLock.unlock();
@@ -629,6 +645,7 @@ public class AllConnectConnectionHolder extends ConnectionHolder {
      */
     @Override
     public void closeAllClientTransports(DestroyHook destroyHook) {
+
         // 清空所有列表,不让再调了
         Map<ProviderInfo, ClientTransport> all = clearProviders();
         if (destroyHook != null) {
@@ -741,6 +758,7 @@ public class AllConnectConnectionHolder extends ConnectionHolder {
             tmp.put("subHealth", new HashSet<ProviderInfo>(subHealthConnections.keySet()));
             tmp.put("retry", new HashSet<ProviderInfo>(retryConnections.keySet()));
             tmp.put("uninitialized", new HashSet<ProviderInfo>(uninitializedConnections.keySet()));
+            tmp.put("all", new HashSet<ProviderInfo>(lastAddresses));
             return tmp;
         } finally {
             providerLock.unlock();
